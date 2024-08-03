@@ -1,4 +1,4 @@
-/*
+/*----------------------------------------------------------------------------------------------------------------
 
 Ce programme est une passerelle entre un bus de rétro signalisation S88 et un logiciel de gestion de réseau
 comme Rocrail, iTrain ou JMRI et quelques autres.
@@ -6,14 +6,24 @@ comme Rocrail, iTrain ou JMRI et quelques autres.
 Il permet de scanner les décodeurs S88 (M88 etc...), traite les modifications d'états sur les capteurs et
 renvoi au logiciel les seules modifications constatées pour éviter la surcharge du logiciel.
 
-Le transfert des données peut s'opérer soit en mode TCP, soit en WiFi ou encore sur un bus CAN
+Le transfert des données peut s'opérer soit en mode TCP, (Ethernet ou WiFi) ou encore sur un bus CAN
 
-*/
+----------------------------------------------------------------------------------------------------------------
+
+This program is a gateway between an S88 feedback bus and a network management software
+like Rocrail, iTrain, or JMRI, among others.
+
+It scans the S88 decoders (M88, etc.), processes the state changes on the sensors, and
+sends only the detected changes back to the software to avoid overloading it.
+
+Data transfer can occur either via TCP (Ethernet or WiFi) or over a CAN bus.
+
+----------------------------------------------------------------------------------------------------------------*/
 
 
 
 #define PROJECT "S88 gateway for Rocrail"
-#define VERSION "0.3"
+#define VERSION "0.3.1"
 #define AUTHOR "Christophe BOBILLE - www.locoduino.org"
 
 
@@ -35,8 +45,8 @@ Le transfert des données peut s'opérer soit en mode TCP, soit en WiFi ou encor
 //  S88
 //----------------------------------------------------------------------------------------
 
-#define S88_NB_SLAVE 2          // Nombre de modules S88
-#define S88_NB_SLAVE_INPUTS 16  // Nombre d'entrées par module
+#define S88_NB_SLAVE 2          // Number of S88 modules
+#define S88_NB_SLAVE_INPUTS 16  // Number of inputs per module
 
 
 
@@ -63,8 +73,8 @@ EthernetClient client;
 //----------------------------------------------------------------------------------------
 #elif defined(WIFI)
 #include <WiFi.h>
-const char *ssid = "**********";
-const char *password = "***********";
+const char *ssid = "Livebox-BC90";
+const char *password = "V9b7qzKFxdQfbMT4Pa";
 WiFiServer server(port);
 WiFiClient client;
 
@@ -112,7 +122,7 @@ const uint8_t BUFFER_SIZE = 13;
 //----------------------------------------------------------------------------------------
 
 void setup() {
-  // Initialisation de la communication série pour le debug
+  // Serial communication initialization for debugging
   Serial.begin(115200);
   while (!Serial) {
     delay(100);
@@ -125,8 +135,8 @@ void setup() {
 
 #if defined(TCP)
   Serial.println("Waiting for Ethernet connection : ");
-  // Initialisation de l'Ethernet
-  Ethernet.init(5);  // MKR ETH Shield (changer selon votre matériel)
+  // Ethernet initialization
+  Ethernet.init(5);  // MKR ETH Shield (change depending on your hardware)
   Ethernet.begin(mac, ip);
   server.begin();
   Serial.print("IP address = ");
@@ -168,8 +178,7 @@ void setup() {
   debugQueue = xQueueCreate(50, sizeof(char) * 128);
 
   // Création des tâches
-
-  xTaskCreatePinnedToCore(S88receiveTask, "S88receiveTask", 4 * 1024, (void *)s88Queue, 5, NULL, 1);  // Priorité 1, Core 1
+  xTaskCreatePinnedToCore(S88receiveTask, "S88receiveTask", 4 * 1024, (void *)s88Queue, 5, NULL, 1);  // Priorité 5, Core 1
 #if defined(TCP) || defined(WIFI)
   xTaskCreatePinnedToCore(tcpListenTask, "tcpListenTask", 4 * 1024, NULL, 1, NULL, 1);  // Priorité 1, Core 1
   xTaskCreatePinnedToCore(tcpSendTask, "tcpSendTask", 4 * 1024, NULL, 5, NULL, 0);      // Priorité 5, Core 0
@@ -183,9 +192,7 @@ void setup() {
 //  LOOP
 //----------------------------------------------------------------------------------------
 
-void loop() {
-  // nothing to do
-}
+void loop() {}// nothing to do
 
 
 //----------------------------------------------------------------------------------------
@@ -195,14 +202,14 @@ void loop() {
 void tcpListenTask(void *pvParameters) {
   while (true) {
     if (!client || !client.connected()) {
-      client = server.available();  // Écouter les connexions entrantes
+      client = server.available();  // Listen for incoming connections
       if (client) {
         char debugMsg[128];
-        snprintf(debugMsg, sizeof(debugMsg), "Client connecté, IP : %s", client.remoteIP().toString().c_str());
+        snprintf(debugMsg, sizeof(debugMsg), "Connected client, IP : %s", client.remoteIP().toString().c_str());
         xQueueSend(debugQueue, debugMsg, portMAX_DELAY);
       }
     }
-    vTaskDelay(100 * portTICK_PERIOD_MS);  // Vérifier toutes les 100ms
+    vTaskDelay(100 * portTICK_PERIOD_MS);  // Check every 100ms
   }
 }
 #endif
@@ -222,7 +229,7 @@ void S88receiveTask(void *pvParameters) {
 
   while (true) {
     s88.readS88();
-    vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(100));  // toutes les x ms
+    vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(100));  // every x ms
   }
 }
 
@@ -241,7 +248,7 @@ void tcpSendTask(void *pvParameters) {
   const uint8_t dlc = 8;
 
   while (true) {
-      if (xQueueReceive(s88Queue, &message, portMAX_DELAY)) {
+    if (xQueueReceive(s88Queue, &message, portMAX_DELAY)) {
       if (client && client.connected()) {
         sBuffer[0] = 0x00;
         sBuffer[1] = command | response;
@@ -268,14 +275,14 @@ void tcpSendTask(void *pvParameters) {
 void canSendTask(void *pvParameters) {
   char message[BUFFER_SIZE];
   while (true) {
-    //Serial.println("canSendTask");
     if (xQueueReceive(s88Queue, message, portMAX_DELAY)) {
-      if (client && client.connected()) {
-        client.write(message, BUFFER_SIZE);
-        char debugMsg[128];
-        snprintf(debugMsg, sizeof(debugMsg), "Envoyé au client TCP: %s", message);
-        xQueueSend(debugQueue, debugMsg, portMAX_DELAY);
-      }
+      CANMessage frameOut;
+      frameOut.id = (message[0] << 24) | (message[1] << 16) | rrHash;
+      frameOut.ext = true;
+      frameOut.len = message[4];
+      for (byte i = 0; i < frameOut.len; i++)
+        frameOut.data[i] = message[i + 5];
+      const bool ok = ACAN_ESP32::can.tryToSend(frameOut);
     }
   }
 }
