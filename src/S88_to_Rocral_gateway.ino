@@ -23,7 +23,7 @@ Data transfer can occur either via TCP (Ethernet or WiFi) or over a CAN bus.
 
 
 #define PROJECT "S88 gateway for Rocrail"
-#define VERSION "0.3.1"
+#define VERSION "0.3.2"
 #define AUTHOR "Christophe BOBILLE - www.locoduino.org"
 
 
@@ -178,14 +178,14 @@ void setup() {
   debugQueue = xQueueCreate(50, sizeof(char) * 128);
 
   // Création des tâches
-  xTaskCreatePinnedToCore(S88receiveTask, "S88receiveTask", 4 * 1024, (void *)s88Queue, 5, NULL, 1);  // Priorité 5, Core 1
+  xTaskCreatePinnedToCore(S88receiveTask, "S88receiveTask", 4 * 1024, (void *)s88Queue, 5, NULL, 1);  // Priority 5, Core 1
 #if defined(TCP) || defined(WIFI)
-  xTaskCreatePinnedToCore(tcpListenTask, "tcpListenTask", 4 * 1024, NULL, 1, NULL, 1);  // Priorité 1, Core 1
-  xTaskCreatePinnedToCore(tcpSendTask, "tcpSendTask", 4 * 1024, NULL, 5, NULL, 0);      // Priorité 5, Core 0
+  xTaskCreatePinnedToCore(tcpListenTask, "tcpListenTask", 4 * 1024, NULL, 1, NULL, 1);  // Priority 1, Core 1
+  xTaskCreatePinnedToCore(tcpSendTask, "tcpSendTask", 4 * 1024, NULL, 5, NULL, 0);      // Priority 5, Core 0
 #elif defined(CAN)
-  xTaskCreatePinnedToCore(canSendTask, "canSendTask", 4 * 1024, NULL, 5, NULL, 0);  // Priorité 5, Core 0
+  xTaskCreatePinnedToCore(canSendTask, "canSendTask", 4 * 1024, NULL, 5, NULL, 0);  // Priority 5, Core 0
 #endif
-  xTaskCreatePinnedToCore(debugTask, "debugTask", 4 * 1024, NULL, 1, NULL, 1);  // Priorité 1, Core 1
+  xTaskCreatePinnedToCore(debugTask, "debugTask", 4 * 1024, NULL, 1, NULL, 1);  // Priority 1, Core 1
 }  // end setup
 
 //----------------------------------------------------------------------------------------
